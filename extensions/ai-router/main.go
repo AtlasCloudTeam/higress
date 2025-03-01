@@ -37,18 +37,23 @@ type AIRouterConfig struct {
 }
 
 type requestInfo struct {
-	methods       []string
-	fillBody      bool
-	destHeaderKey string
-	fromBodyKey   string
+	methods    []string
+	routerMaps []RouterMap
+	fillBody   bool
 }
 
 type RouterConfig struct {
-	destHeaderKey  string   `yaml:"dest_header_key"`
-	fromBodyKey    string   `yaml:"from_body_key"`
-	requestPath    string   `yaml:"request_path"`
-	requestMethods []string `yaml:"request_methods"`
-	streamOptions  bool     `yaml:"stream_options"`
+	requestPath    string      `yaml:"request_path"`
+	requestMethods []string    `yaml:"request_methods"`
+	routerMaps     []RouterMap `yaml:"route_maps"`
+	streamOptions  bool        `yaml:"stream_options"`
+}
+
+type RouterMap struct {
+	destHeaderKey string   `yaml:"dest_header_key"`
+	fromBodyKey   string   `yaml:"from_body_key"`
+	defaultValue  string   `yaml:"default_value"`
+	supportModels []string `yaml:"support_models"`
 }
 
 func parseConfig(configJson gjson.Result, config *AIRouterConfig, log wrapper.Log) (err error) {
@@ -106,16 +111,26 @@ func onHttpRequestBody(ctx wrapper.HttpContext, cfg AIRouterConfig, body []byte,
 		return types.ActionContinue
 	}
 
-	value := gjson.GetBytes(body, info.fromBodyKey).String()
-	if value == "" {
-		log.Warnf("failed to get body key field [%s] by request body", info.fromBodyKey)
+	model := gjson.GetBytes(body, "model").String()
+	if model == "" {
+		log.Warn("failed to get model field by request body")
 		return types.ActionContinue
 	}
 
-	err := proxywasm.ReplaceHttpRequestHeader(info.destHeaderKey, value)
-	if err != nil {
-		log.Warnf("failed to replace request headers [%s]-[%s], err: %v", info.destHeaderKey, value, err)
-		return types.ActionContinue
+	for _, rm := range info.routerMaps {
+		var value string
+		if rm.fromBodyKey == "model" {
+			value = model
+		} else {
+			value = gjson.GetBytes(body, rm.fromBodyKey).String()
+			value = supportWebSearch(rm.supportModels, model, value, rm.defaultValue)
+		}
+
+		err := proxywasm.ReplaceHttpRequestHeader(rm.destHeaderKey, value)
+		if err != nil {
+			log.Warnf("failed to replace request headers [%s]-[%s], err: %v", rm.destHeaderKey, value, err)
+			return types.ActionContinue
+		}
 	}
 
 	if !info.fillBody {
@@ -183,18 +198,6 @@ func parseRouterConfig(rules []gjson.Result) (res []RouterConfig, reqInfos map[s
 	for _, r := range rules {
 		var router RouterConfig
 
-		router.destHeaderKey = strings.ToLower(r.Get("dest_header_key").String())
-		if router.destHeaderKey == "" {
-			err = errors.Wrapf(err, "dest_header_key is required")
-			return
-		}
-
-		router.fromBodyKey = r.Get("from_body_key").String()
-		if router.fromBodyKey == "" {
-			err = errors.Wrapf(err, "from_body_key is required")
-			return
-		}
-
 		router.requestPath = strings.ToLower(r.Get("request_path").String())
 		if router.requestPath == "" {
 			err = errors.Wrapf(err, "request_path is required")
@@ -209,6 +212,30 @@ func parseRouterConfig(rules []gjson.Result) (res []RouterConfig, reqInfos map[s
 			return
 		}
 
+		for _, routeMap := range r.Get("route_maps").Array() {
+			var models []string
+			for _, m := range routeMap.Get("support_models").Array() {
+				models = append(models, m.String())
+			}
+
+			kv := RouterMap{
+				destHeaderKey: strings.ToLower(routeMap.Get("dest_header_key").String()),
+				fromBodyKey:   strings.ToLower(routeMap.Get("from_body_key").String()),
+				defaultValue:  strings.ToLower(routeMap.Get("default_value").String()),
+				supportModels: models,
+			}
+
+			if kv.fromBodyKey == "" || kv.destHeaderKey == "" {
+				err = errors.Wrapf(err, "dest_header_key or from_body_key is required")
+				return
+			}
+			router.routerMaps = append(router.routerMaps, kv)
+		}
+		if len(router.routerMaps) == 0 {
+			err = errors.Wrapf(err, "route_maps is required")
+			return
+		}
+
 		router.streamOptions = r.Get("stream_options").Bool()
 
 		_, ok := reqInfos[router.requestPath]
@@ -216,14 +243,31 @@ func parseRouterConfig(rules []gjson.Result) (res []RouterConfig, reqInfos map[s
 			err = errors.Wrapf(err, "request_path is duplicated")
 			return
 		}
+
 		reqInfos[router.requestPath] = requestInfo{
-			methods:       router.requestMethods,
-			fillBody:      router.streamOptions,
-			destHeaderKey: router.destHeaderKey,
-			fromBodyKey:   router.fromBodyKey,
+			methods:    router.requestMethods,
+			fillBody:   router.streamOptions,
+			routerMaps: router.routerMaps,
 		}
 
 		res = append(res, router)
 	}
 	return
+}
+
+func supportWebSearch(supportModels []string, requestModel string, requestValue, defaultValue string) string {
+	if requestValue == "" {
+		return defaultValue
+	}
+
+	if len(supportModels) <= 0 {
+		return requestValue
+	}
+
+	for _, model := range supportModels {
+		if model == requestModel {
+			return requestValue
+		}
+	}
+	return defaultValue
 }
