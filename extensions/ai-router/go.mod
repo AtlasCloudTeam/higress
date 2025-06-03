@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/alibaba/higress/plugins/wasm-go v1.4.3
-	github.com/higress-group/proxy-wasm-go-sdk v1.0.0
+	github.com/higress-group/proxy-wasm-go-sdk v1.0.1
 	github.com/pkg/errors v0.9.1
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/pretty v1.2.1

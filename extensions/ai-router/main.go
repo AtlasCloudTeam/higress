@@ -117,6 +117,8 @@ func onHttpRequestBody(ctx wrapper.HttpContext, cfg AIRouterConfig, body []byte,
 		return types.ActionContinue
 	}
 
+	webSearch := gjson.GetBytes(body, "web_search").Bool()
+
 	for _, rm := range info.routerMaps {
 		var value string
 		if rm.fromBodyKey == "model" {
@@ -137,7 +139,7 @@ func onHttpRequestBody(ctx wrapper.HttpContext, cfg AIRouterConfig, body []byte,
 		return types.ActionContinue
 	}
 
-	data, err := fillRequestBody(body)
+	data, err := fillRequestBody(body, webSearch)
 	if err != nil {
 		log.Warnf("failed to fill request body: %v", err)
 		return types.ActionContinue
@@ -151,8 +153,16 @@ func onHttpRequestBody(ctx wrapper.HttpContext, cfg AIRouterConfig, body []byte,
 	return types.ActionContinue
 }
 
-func fillRequestBody(raw []byte) ([]byte, error) {
+func fillRequestBody(raw []byte, webSearch bool) ([]byte, error) {
 	body := append([]byte(nil), raw...)
+	var err error
+
+	if webSearch {
+		body, err = sjson.SetBytes(body, "web_search_options.search_context_size", "high")
+		if err != nil {
+			return body, fmt.Errorf("failed to set web_search_options.search_context_size: %v", err)
+		}
+	}
 
 	stream := gjson.GetBytes(body, "stream")
 	// 不存在, 设置为 非流式请求
@@ -165,7 +175,7 @@ func fillRequestBody(raw []byte) ([]byte, error) {
 	}
 
 	// stream = true, 改写 body
-	body, err := sjson.SetBytes(body, "stream_options.include_usage", true)
+	body, err = sjson.SetBytes(body, "stream_options.include_usage", true)
 	if err != nil {
 		return body, fmt.Errorf("failed to set stream_options.include_usage: %v", err)
 	}
