@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    higress.io/destination: serverless-de4817rfyq2r.dns:443
+    higress.io/enable-rewrite: "true"
+    higress.io/exact-match-header-x-ai-model: deepseek-ai/DeepSeek-R1
+    higress.io/ignore-path-case: "false"
+    higress.io/rewrite-path: /
+    higress.io/ssl-redirect: "true"
+    higress.io/upstream-vhost: deepseek-r1-x8k3z9.us-dc-1.atlascloud.ai
+  labels:
+    higress.io/domain_api.atlascloud.ai: "true"
+    higress.io/resource-definer: higress
+  name: serverless-de4817rfyq2r
+  namespace: higress-system
+spec:
+  ingressClassName: higress
+  rules:
+    - host: api.atlascloud.ai
+      http:
+        paths:
+          - backend:
+              resource:
+                apiGroup: networking.higress.io
+                kind: McpBridge
+                name: default
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - api.atlascloud.ai
+      secretName: atlascloud-ai-tls

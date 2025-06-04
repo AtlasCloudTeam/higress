@@ -1,0 +1,38 @@
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  annotations:
+    higress.io/wasm-plugin-description: Enables CORS (Cross-Origin Resource Sharing)
+      HTTP response headers for the server.
+    higress.io/wasm-plugin-icon: https://img.alicdn.com/imgextra/i1/O1CN01jKT9vC1O059vNaq5u_!!6000000001642-2-tps-42-42.png
+    higress.io/wasm-plugin-title: CORS
+  labels:
+    higress.io/resource-definer: higress
+    higress.io/wasm-plugin-built-in: "true"
+    higress.io/wasm-plugin-category: security
+    higress.io/wasm-plugin-name: cors
+    higress.io/wasm-plugin-version: 1.0.0
+  name: cors-1.0.0
+  namespace: higress-system
+spec:
+  defaultConfigDisable: true
+  failStrategy: FAIL_OPEN
+  imagePullPolicy: UNSPECIFIED_POLICY
+  matchRules:
+    - config:
+        allow_credentials: true
+        allow_headers:
+          - '*'
+        allow_methods:
+          - '*'
+        allow_origin_patterns:
+          - '*'
+        expose_headers:
+          - '*'
+        max_age: 86400
+      configDisable: false
+      domain:
+        - api.atlascloud.ai
+  phase: AUTHZ
+  priority: 340
+  url: oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/cors:1.0.0

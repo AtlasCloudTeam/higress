@@ -1,0 +1,46 @@
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  annotations:
+    higress.io/wasm-plugin-description: Higress supports enhancing the accuracy and
+      timeliness of responses from models like DeepSeek-R1 by integrating real-time
+      results from search engines (Google/Bing/Arxiv/Elasticsearch etc.)
+    higress.io/wasm-plugin-icon: https://img.alicdn.com/imgextra/i1/O1CN018iKKih1iVx287RltL_!!6000000004419-2-tps-42-42.png
+    higress.io/wasm-plugin-title: AI Search
+  labels:
+    higress.io/resource-definer: higress
+    higress.io/wasm-plugin-built-in: "true"
+    higress.io/wasm-plugin-category: ai
+    higress.io/wasm-plugin-name: ai-search
+    higress.io/wasm-plugin-version: 1.0.0
+  name: ai-search-1.0.0
+  namespace: higress-system
+spec:
+  defaultConfigDisable: true
+  failStrategy: FAIL_OPEN
+  imagePullPolicy: UNSPECIFIED_POLICY
+  matchRules:
+    - config:
+        defaultEnable: false
+        defaultLang: en-US
+        needReference: true
+        promptTemplate: |
+          # Search Results:
+          {search_results}
+          
+          # Please answer this question:
+          {question}
+        referenceLocation: tail
+        searchFrom:
+          - apiKey: AIzaSyC7TTPNrHsElMDXfIi5ffgolje4RPJDgpg
+            count: 5
+            cx: f4804616628b442cd
+            serviceName: google-svc.dns
+            servicePort: 443
+            type: google
+      configDisable: false
+      domain:
+        - api.atlascloud.ai
+  phase: UNSPECIFIED_PHASE
+  priority: 440
+  url: oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/ai-search:1.0.0

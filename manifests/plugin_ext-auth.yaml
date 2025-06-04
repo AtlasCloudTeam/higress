@@ -1,0 +1,52 @@
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  annotations:
+    higress.io/wasm-plugin-description: Sends an authentication request to an external
+      authorization service to check whether the client request is authorized.
+    higress.io/wasm-plugin-icon: https://img.alicdn.com/imgextra/i4/O1CN01BPFGlT1pGZ2VDLgaH_!!6000000005333-2-tps-42-42.png
+    higress.io/wasm-plugin-title: Ext Auth
+  labels:
+    higress.io/resource-definer: higress
+    higress.io/wasm-plugin-built-in: "true"
+    higress.io/wasm-plugin-category: auth
+    higress.io/wasm-plugin-name: ext-auth
+    higress.io/wasm-plugin-version: 1.0.0
+  name: ext-auth-1.0.0
+  namespace: higress-system
+spec:
+  defaultConfigDisable: true
+  failStrategy: FAIL_OPEN
+  imagePullPolicy: UNSPECIFIED_POLICY
+  matchRules:
+    - config:
+        http_service:
+          authorization_request:
+            allowed_headers:
+              - exact: x-account-id
+              - exact: X-Forwarded-For
+              - exact: X-Real-IP
+          authorization_response:
+            allowed_upstream_headers:
+              - exact: x-account-id
+              - exact: x-serverless-id
+              - exact: Authorization
+          endpoint:
+            path: /api/v1/gw/auth
+            request_method: GET
+            service_name: backend.atlascloud-system.svc.cluster.local
+            service_port: 9099
+          endpoint_mode: forward_auth
+          timeout: 10000
+        match_list:
+          - match_rule_path: /v1/models
+            match_rule_type: exact
+          - match_rule_path: /v1/stripeevents
+            match_rule_type: exact
+        match_type: whitelist
+      configDisable: false
+      domain:
+        - api.atlascloud.ai
+  phase: AUTHN
+  priority: 360
+  url: oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/ext-auth:1.0.0

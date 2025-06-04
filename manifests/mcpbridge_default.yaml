@@ -1,0 +1,37 @@
+apiVersion: networking.higress.io/v1
+kind: McpBridge
+metadata:
+  annotations:
+  name: default
+  namespace: higress-system
+spec:
+  registries:
+    - domain: deepseek-r1-x8k3z9.us-dc-1.atlascloud.ai
+      name: serverless-de4817rfyq2r
+      port: 443
+      protocol: https
+      sni: deepseek-r1-x8k3z9.us-dc-1.atlascloud.ai
+      type: dns
+    - domain: qwen3-32b-x7k3z9.us-dc-1.atlascloud.ai
+      name: serverless-qwen37rfyq2r
+      port: 443
+      protocol: https
+      sni: qwen3-32b-x7k3z9.us-dc-1.atlascloud.ai
+      type: dns
+    - domain: llama4-scout-x7k3z9.us-dc-1.atlascloud.ai
+      name: serverless-llama4rfyr3t
+      port: 443
+      protocol: https
+      sni: llama4-scout-x7k3z9.us-dc-1.atlascloud.ai
+      type: dns
+    - domain: customsearch.googleapis.com
+      name: google-svc
+      port: 443
+      protocol: https
+      sni: customsearch.googleapis.com
+      type: dns
+    - domain: 10.0.238.138:6379
+      name: redis-static
+      port: 80
+      protocol: http
+      type: static

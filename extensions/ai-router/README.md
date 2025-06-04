@@ -50,3 +50,24 @@ routers:
         - 当请求体字段 `"web_search"` 不存在时, 使用默认值配置 `"default_value"` 的值填充到请求头 `"x-web-search"` 中
         - 当请求体字段 `"model"` 不等于 `deepseek-ai/DeepSeek-R1` 时, 也使用默认值配置 `"default_value"` 的值填充到请求头
           `"x-web-search"` 中
+
+
+## 构建说明
+
+1. 环境准备(以x86为例)
+
+- go version: 1.20.14
+- tinygo version: 0.29.0
+
+2. 构建wasm
+```go
+go mod tidy
+tinygo build -o plugin.wasm -scheduler=none -target=wasi -gc=custom -tags="custommalloc nottinygc_finalizer proxy_wasm_version_0_2_100" ./
+```
+
+3. 构建镜像并推送
+```dockerfile
+docker build -f Dockerfile -t {repo}:{tag} .
+
+docker push {repo}:{tag}
+```

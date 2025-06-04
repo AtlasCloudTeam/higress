@@ -1,0 +1,33 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    higress.io/destination: serverless-llama4rfyr3t.dns:443
+    higress.io/enable-rewrite: "true"
+    higress.io/exact-match-header-x-ai-model: meta-llama/Llama-4-Scout-17B-16E-Instruct
+    higress.io/ignore-path-case: "false"
+    higress.io/rewrite-path: /
+    higress.io/ssl-redirect: "true"
+    higress.io/upstream-vhost: llama4-scout-x7k3z9.us-dc-1.atlascloud.ai
+  labels:
+    higress.io/domain_api.atlascloud.ai: "true"
+    higress.io/resource-definer: higress
+  name: serverless-llama4rfyr3t
+  namespace: higress-system
+spec:
+  ingressClassName: higress
+  rules:
+    - host: api.atlascloud.ai
+      http:
+        paths:
+          - backend:
+              resource:
+                apiGroup: networking.higress.io
+                kind: McpBridge
+                name: default
+            path: /
+            pathType: Prefix
+  tls:
+    - hosts:
+        - api.atlascloud.ai
+      secretName: atlascloud-ai-tls

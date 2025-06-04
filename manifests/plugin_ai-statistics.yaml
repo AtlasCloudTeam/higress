@@ -1,0 +1,42 @@
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  annotations:
+    higress.io/wasm-plugin-description: Provides statistics of token usage, including
+      logs, monitoring, and alerts.
+    higress.io/wasm-plugin-icon: https://img.alicdn.com/imgextra/i1/O1CN018iKKih1iVx287RltL_!!6000000004419-2-tps-42-42.png
+    higress.io/wasm-plugin-title: AI Statistics
+  labels:
+    higress.io/resource-definer: higress
+    higress.io/wasm-plugin-built-in: "true"
+    higress.io/wasm-plugin-category: ai
+    higress.io/wasm-plugin-name: ai-statistics
+    higress.io/wasm-plugin-version: 1.0.0
+  name: ai-statistics-1.0.0
+  namespace: higress-system
+spec:
+  defaultConfigDisable: true
+  failStrategy: FAIL_OPEN
+  imagePullPolicy: UNSPECIFIED_POLICY
+  matchRules:
+    - config:
+        attributes:
+          - apply_to_log: true
+            key: account_id
+            value: x-account-id
+            value_source: request_header
+          - apply_to_log: true
+            key: id
+            value: id
+            value_source: response_body
+          - apply_to_log: true
+            key: id
+            rule: replace
+            value: id
+            value_source: response_streaming_body
+      configDisable: false
+      domain:
+        - api.atlascloud.ai
+  phase: UNSPECIFIED_PHASE
+  priority: 900
+  url: oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/ai-statistics:1.0.0

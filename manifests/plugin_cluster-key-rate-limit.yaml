@@ -1,0 +1,44 @@
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  annotations:
+    higress.io/wasm-plugin-description: Implement cluster-level rate limiting based
+      on specific key values, which can be derived from URL parameters, HTTP request
+      headers, client IP addresses, etc.
+    higress.io/wasm-plugin-icon: https://img.alicdn.com/imgextra/i3/O1CN01bAFa9k1t1gdQcVTH0_!!6000000005842-2-tps-42-42.png
+    higress.io/wasm-plugin-title: Key Cluster Rate Limit
+  labels:
+    higress.io/resource-definer: higress
+    higress.io/wasm-plugin-built-in: "true"
+    higress.io/wasm-plugin-category: traffic
+    higress.io/wasm-plugin-name: cluster-key-rate-limit
+    higress.io/wasm-plugin-version: 1.0.0
+  name: cluster-key-rate-limit-1.0.0
+  namespace: higress-system
+spec:
+  defaultConfigDisable: true
+  failStrategy: FAIL_OPEN
+  imagePullPolicy: UNSPECIFIED_POLICY
+  matchRules:
+    - config:
+        redis:
+          password: zpPEtz3!3jB7
+          service_name: redis-static.static
+          service_port: 80
+        rule_items:
+          - limit_by_header: x-ai-model
+            limit_keys:
+              - key: deepseek-ai/DeepSeek-R1
+                query_per_second: 50
+              - key: Qwen/Qwen3-32B
+                query_per_second: 50
+              - key: meta-llama/Llama-4-Scout-17B-16E-Instruct
+                query_per_second: 50
+        rule_name: model_rate
+        show_limit_quota_header: true
+      configDisable: false
+      domain:
+        - api.atlascloud.ai
+  phase: UNSPECIFIED_PHASE
+  priority: 20
+  url: oci://higress-registry.cn-hangzhou.cr.aliyuncs.com/plugins/cluster-key-rate-limit:1.0.0

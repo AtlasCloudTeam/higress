@@ -1,0 +1,34 @@
+apiVersion: extensions.higress.io/v1alpha1
+kind: WasmPlugin
+metadata:
+  annotations:
+    higress.io/wasm-plugin-description: AI Model Router
+    higress.io/wasm-plugin-icon: https://img.alicdn.com/imgextra/i4/O1CN01BPFGlT1pGZ2VDLgaH_!!6000000005333-2-tps-42-42.png
+    higress.io/wasm-plugin-title: ai-router
+  labels:
+    higress.io/resource-definer: higress
+    higress.io/wasm-plugin-built-in: "false"
+    higress.io/wasm-plugin-category: custom
+    higress.io/wasm-plugin-name: ai-router
+    higress.io/wasm-plugin-version: 1.0.0
+  name: ai-router-1.0.0
+  namespace: higress-system
+spec:
+  defaultConfigDisable: true
+  failStrategy: FAIL_OPEN
+  matchRules:
+    - config:
+        routers:
+          - request_methods:
+              - POST
+            request_path: /v1/chat/completions
+            route_maps:
+              - dest_header_key: x-ai-model
+                from_body_key: model
+            stream_options: true
+      configDisable: false
+      domain:
+        - api.atlascloud.ai
+  phase: AUTHN
+  priority: 410
+  url: oci://ghcr.io/zukadong/ai-router:0.0.2
