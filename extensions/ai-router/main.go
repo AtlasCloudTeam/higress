@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/pkg/errors"
 	"github.com/tidwall/gjson"
-	"github.com/tidwall/pretty"
 	"github.com/tidwall/sjson"
 
 	"github.com/alibaba/higress/plugins/wasm-go/pkg/wrapper"
@@ -15,6 +15,9 @@ import (
 )
 
 const (
+	defaultBodySize    = 32 * 1024
+	defaultSupportSize = 32 * 1024 * 1024
+
 	requestFillHeader = "request-fill-header"
 
 	requestPath = "request-path"
@@ -31,7 +34,8 @@ func main() {
 }
 
 type AIRouterConfig struct {
-	routers []RouterConfig `yaml:"routers"`
+	routers   []RouterConfig `yaml:"routers"`
+	modelMaps []ModelMap     `yaml:"model_map"`
 
 	requestInfos map[string]requestInfo `yaml:"-"`
 }
@@ -49,6 +53,11 @@ type RouterConfig struct {
 	streamOptions  bool        `yaml:"stream_options"`
 }
 
+type ModelMap struct {
+	Raw string `yaml:"raw"`
+	Dst string `yaml:"dst"`
+}
+
 type RouterMap struct {
 	destHeaderKey string   `yaml:"dest_header_key"`
 	fromBodyKey   string   `yaml:"from_body_key"`
@@ -63,41 +72,55 @@ func parseConfig(configJson gjson.Result, config *AIRouterConfig, log wrapper.Lo
 	}
 
 	config.routers, config.requestInfos, err = parseRouterConfig(routersInJson.Array())
+
 	if err != nil {
 		return errors.Wrap(err, "failed to parse router config")
 	}
 
-	log.Infof("ai router config is: routers: %+v", config.routers)
+	mapInJson := configJson.Get("model_map")
+	if mapInJson.Exists() {
+		config.modelMaps = parseModelMapConfig(mapInJson.Array())
+	}
+
+	log.Infof("ai router config is: routers: %+v, modelmap: %+v", config.routers, config.modelMaps)
 
 	return nil
 }
 
 func onHttpRequestHeaders(ctx wrapper.HttpContext, cfg AIRouterConfig, log wrapper.Log) types.Action {
 	path, method := ctx.Path(), ctx.Method()
-
 	if filterRequest(cfg, path, method) {
 		ctx.DontReadRequestBody()
 		return types.ActionContinue
 	}
 
-	ctx.SetContext(requestFillHeader, true)
-	ctx.SetContext(requestPath, path)
+	length, err := getHttpHeaderContentLength()
+	if err != nil {
+		log.Errorf("failed to get http header content-length: %v", err)
+		ctx.DontReadRequestBody()
+		return types.ActionContinue
+	}
+	if length >= defaultBodySize {
+		ctx.SetRequestBodyBufferLimit(defaultSupportSize)
+	}
 
 	if cfg.requestInfos[path].fillBody {
-		err := proxywasm.RemoveHttpRequestHeader("content-length")
+		err = proxywasm.RemoveHttpRequestHeader("content-length")
 		if err != nil {
 			log.Warnf("remove http request header failed: %v", err)
+			ctx.DontReadRequestBody()
+			return types.ActionContinue
 		}
 	}
+
+	ctx.SetContext(requestFillHeader, true)
+	ctx.SetContext(requestPath, path)
 
 	return types.HeaderStopIteration
 }
 
 func onHttpRequestBody(ctx wrapper.HttpContext, cfg AIRouterConfig, body []byte, log wrapper.Log) types.Action {
 	if !ctx.GetBoolContext(requestFillHeader, false) {
-		return types.ActionContinue
-	}
-	if len(body) == 0 {
 		return types.ActionContinue
 	}
 
@@ -139,13 +162,15 @@ func onHttpRequestBody(ctx wrapper.HttpContext, cfg AIRouterConfig, body []byte,
 		return types.ActionContinue
 	}
 
-	data, err := fillRequestBody(body, webSearch)
+	dstModel := getDstModel(model, cfg.modelMaps)
+
+	data, err := fillRequestBody(body, dstModel, webSearch)
 	if err != nil {
 		log.Warnf("failed to fill request body: %v", err)
 		return types.ActionContinue
 	}
 
-	if err = proxywasm.ReplaceHttpRequestBody(pretty.Pretty(data)); err != nil {
+	if err = proxywasm.ReplaceHttpRequestBody(data); err != nil {
 		log.Warnf("failed to replace request body: %v", err)
 		return types.ActionContinue
 	}
@@ -153,7 +178,7 @@ func onHttpRequestBody(ctx wrapper.HttpContext, cfg AIRouterConfig, body []byte,
 	return types.ActionContinue
 }
 
-func fillRequestBody(raw []byte, webSearch bool) ([]byte, error) {
+func fillRequestBody(raw []byte, dstModel string, webSearch bool) ([]byte, error) {
 	body := append([]byte(nil), raw...)
 	var err error
 
@@ -161,6 +186,13 @@ func fillRequestBody(raw []byte, webSearch bool) ([]byte, error) {
 		body, err = sjson.SetBytes(body, "web_search_options.search_context_size", "high")
 		if err != nil {
 			return body, fmt.Errorf("failed to set web_search_options.search_context_size: %v", err)
+		}
+	}
+
+	if dstModel != "" {
+		body, err = sjson.SetBytes(body, "model", dstModel)
+		if err != nil {
+			return body, fmt.Errorf("failed to set model: %v", err)
 		}
 	}
 
@@ -201,6 +233,50 @@ func filterRequest(cfg AIRouterConfig, path string, method string) bool {
 		}
 	}
 	return true
+}
+
+func getDstModel(model string, maps []ModelMap) string {
+	if len(maps) == 0 {
+		return ""
+	}
+	for _, m := range maps {
+		if m.Raw == model {
+			return m.Dst
+		}
+	}
+	return ""
+}
+
+func getHttpHeaderContentLength() (int64, error) {
+	contentLength, err := proxywasm.GetHttpRequestHeader("content-length")
+	if err != nil {
+		return 0, err
+	}
+	contentLength = strings.TrimSpace(contentLength)
+	if contentLength == "" {
+		return 0, errors.New("content-length header is empty")
+	}
+	contentLengthInt, err := strconv.ParseInt(contentLength, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+
+	if contentLengthInt <= 0 {
+		return 0, errors.New("content-length header is zero")
+	}
+
+	return contentLengthInt, nil
+}
+
+func parseModelMapConfig(rules []gjson.Result) (res []ModelMap) {
+	for _, rule := range rules {
+		var modelMap ModelMap
+
+		modelMap.Raw = rule.Get("raw").String()
+		modelMap.Dst = rule.Get("dst").String()
+		res = append(res, modelMap)
+	}
+	return res
 }
 
 func parseRouterConfig(rules []gjson.Result) (res []RouterConfig, reqInfos map[string]requestInfo, err error) {
