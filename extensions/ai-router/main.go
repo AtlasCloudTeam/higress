@@ -43,6 +43,7 @@ type AIRouterConfig struct {
 type requestInfo struct {
 	methods    []string
 	routerMaps []RouterMap
+	whiteList  []string
 	fillBody   bool
 }
 
@@ -51,6 +52,7 @@ type RouterConfig struct {
 	requestMethods []string    `yaml:"request_methods"`
 	routerMaps     []RouterMap `yaml:"route_maps"`
 	streamOptions  bool        `yaml:"stream_options"`
+	whiteList      []string    `yaml:"white_list"`
 }
 
 type ModelMap struct {
@@ -137,6 +139,11 @@ func onHttpRequestBody(ctx wrapper.HttpContext, cfg AIRouterConfig, body []byte,
 	model := gjson.GetBytes(body, "model").String()
 	if model == "" {
 		log.Warn("failed to get model field by request body")
+		return types.ActionContinue
+	}
+
+	if filterModel(model, info.whiteList) {
+		log.Warnf("model [%s] not in white list", model)
 		return types.ActionContinue
 	}
 
@@ -235,6 +242,20 @@ func filterRequest(cfg AIRouterConfig, path string, method string) bool {
 	return true
 }
 
+// filterModel 过滤不需要处理的model, true:不需要处理, false:需要处理
+func filterModel(model string, whiteList []string) bool {
+	if len(whiteList) == 0 {
+		return false
+	}
+	m := strings.ToLower(model)
+	for _, w := range whiteList {
+		if w == m {
+			return false
+		}
+	}
+	return true
+}
+
 func getDstModel(model string, maps []ModelMap) string {
 	if len(maps) == 0 {
 		return ""
@@ -298,6 +319,10 @@ func parseRouterConfig(rules []gjson.Result) (res []RouterConfig, reqInfos map[s
 			return
 		}
 
+		for _, m := range r.Get("white_list").Array() {
+			router.whiteList = append(router.whiteList, strings.ToLower(m.String()))
+		}
+
 		for _, routeMap := range r.Get("route_maps").Array() {
 			var models []string
 			for _, m := range routeMap.Get("support_models").Array() {
@@ -334,6 +359,7 @@ func parseRouterConfig(rules []gjson.Result) (res []RouterConfig, reqInfos map[s
 			methods:    router.requestMethods,
 			fillBody:   router.streamOptions,
 			routerMaps: router.routerMaps,
+			whiteList:  router.whiteList,
 		}
 
 		res = append(res, router)
